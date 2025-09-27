@@ -1,0 +1,16 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/lib/docker/containers/*/*-json.log
+  stream: stdout
+  processors:
+    - decode_json_fields:
+        fields: ["log"]
+        target: ""
+        overwrite_keys: true
+    - add_docker_metadata:
+        host: "unix:///var/run/docker.sock"
+  # json: null   # disables JSON parsing
+output.elasticsearch:
+  hosts: [ "http://elasticsearch:9200" ]

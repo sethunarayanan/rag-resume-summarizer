@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Test cache
+.pytest_cache
+
+# VSCode
+.vscode/
+
+Log / Temporary
+*.log
+*.sqlite3
+*.db
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Volume 
+mongo_data/
+chromadb_data/
+es_data/
+fb_data/
+uploads/
+mongod.conf.local/

@@ -1,0 +1,108 @@
+services:
+  streamlit:
+    build: ./frontend
+    container_name: streamlit_ui
+    ports:
+    - "${STREAMLIT_PORT}:${STREAMLIT_PORT}"
+    depends_on:
+    - fastapi
+    volumes:
+    - ./frontend:/app
+    - ./assets:/assets
+    env_file:
+    - .env
+    command: streamlit run app.py --server.headless true --server.fileWatcherType=poll --server.runOnSave true --logger.level=debug
+    # command: >
+    #  /bin/bash -c "pip install websocket-client && streamlit run app.py --server.headless true --server.fileWatcherType=poll --server.runOnSave true --logger.level=debug"
+
+  fastapi:
+    build: ./backend
+    container_name: fastapi_api
+    ports:
+    - "${FASTAPI_PORT}:${FASTAPI_PORT}"
+    depends_on:
+    - mongo
+    - chroma
+    volumes:
+    - ./backend:/app
+    env_file:
+    - .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level=debug
+
+  mongo:
+    image: mongo:7.0
+    container_name: mongo_db
+    ports:
+    - "${MONGO_PORT}:${MONGO_PORT}"
+    volumes:
+    - mongo_data:/data/db
+    - ./mongod.conf.local:/etc/mongod.conf:ro
+    env_file:
+    - .env
+    command: mongod --bind_ip_all --quiet --setParameter enableTestCommands=0
+    restart: unless-stopped
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chroma_db
+    ports:
+    - "${CHROMA_PORT}:${CHROMA_PORT}"
+    volumes:
+    - chromadb_data:/data/db
+    env_file:
+    - .env
+    restart: unless-stopped
+
+  chroma_admin:
+    image: fengzhichao/chromadb-admin:latest
+    container_name: chromadb_admin
+    ports:
+      - "3001:3001"
+    environment:
+      CHROMA_API_URL: "${CHROMA_URI}"
+    depends_on:
+      - chroma
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    container_name: elasticsearch
+    ports:
+    - "${ELASTIC_REST_PORT}:${ELASTIC_REST_PORT}"
+    - "${ELASTIC_TRANSPORT_PORT}:${ELASTIC_TRANSPORT_PORT}"
+    env_file:
+    - .env
+    volumes:
+    - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.0
+    container_name: kibana
+    env_file:
+    - .env
+    depends_on:
+    - elasticsearch
+    - filebeat
+    ports:
+    - "${KIBANA_PORT}:${KIBANA_PORT}"
+    restart: unless-stopped
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.14.0
+    container_name: filebeat
+    user: root
+    depends_on:
+    - elasticsearch
+    volumes:
+    - "/mnt/docker-desktop-disk/data/docker/containers:/var/lib/docker/containers:ro"
+    - "/mnt/wsl/docker-desktop/shared-sockets/host-services/docker.proxy.sock:/var/run/docker.sock:ro"
+    - "./filebeat.yml.local:/usr/share/filebeat/filebeat.yml:ro"
+    - fb_data:/usr/share/filebeat/data
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+  chromadb_data:
+  es_data:
+  fb_data:
