@@ -3,6 +3,9 @@ from os import getenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from chromadb import Client, HttpClient, AdminClient
 from chromadb.config import Settings
+import logging
+
+logger = logging.getLogger("uvicorn")
 
 # Mongo db
 MONGO_AUTH_URI=f"mongodb://{getenv('MONGO_INITDB_ROOT_USERNAME')}:{getenv('MONGO_INITDB_ROOT_PASSWORD')}@mongo:{getenv('MONGO_PORT')}?authSource=admin"

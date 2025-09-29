@@ -8,13 +8,16 @@ from fastapi import status
 from concurrent.futures import ProcessPoolExecutor
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.llms import HuggingFacePipeline
+# from langchain_community.llms import HuggingFacePipeline
+from langchain_huggingface import HuggingFacePipeline
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+# from langchain.chains import LLMChain
+# from langchain_core.runnables.base import RunnableSequence
 from transformers import pipeline
 
 from app.config.settings import mongo_db, chroma_client
 from app.models.models import ResumeMeta, ResumeChunk
+from app.decorators.timing import async_timing
 
 LLM_MODEL_NAME = "google/flan-t5-small"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
@@ -32,7 +35,8 @@ prompt = PromptTemplate(
     template="Clean sentence structure and summarize in 5 sentences:\n\n{text}",
     input_variables=["text"]
 )
-chain = LLMChain(llm=llm, prompt=prompt)
+# chain = LLMChain(llm=llm, prompt=prompt)
+chain = prompt | llm
 
 executor = ProcessPoolExecutor(max_workers=4)
 
@@ -61,22 +65,33 @@ async def add_pdf_to_mongo(file, text):
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE):
     return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
+@async_timing
 async def embed_and_save_chunks(chunks, resume_id):
+
     chunk_ids = []
-    for chunk in chunks:
-        emb = embedding_model.embed_documents([chunk])[0]
+
+    async def process_chunk(chunk):
+        
+        emb = await asyncio.to_thread(embedding_model.embed_documents, [chunk])
+        emb = emb[0]
         chunk_id = str(uuid4())
-        chroma_collection_chunk.add(
+        
+        await asyncio.to_thread(
+            chroma_collection_chunk.add,
             ids=[chunk_id],
             documents=[chunk],
             embeddings=[emb],
-            metadatas=[{"resume_id": resume_id, "chunk_id": chunk_id, "chunk_length": len(chunk)}],
+            metadatas=[{"resume_id": resume_id, "chunk_id": chunk_id, "chunk_length": len(chunk)}]
         )
-        chunk_ids.append(chunk_id)
+        return chunk_id
+
+    chunk_ids = await asyncio.gather(*(process_chunk(chunk) for chunk in chunks))
+
     await mongo_collection_meta.update_one(
         {"id": resume_id},
         {"$set": {"chroma_ids": chunk_ids}}
     )
+
     return chunk_ids
 
 def query_vector_db(resume_id, query_text, top_k=3):
@@ -106,16 +121,16 @@ async def process_resume_file(file):
         relevant_chunks = query_vector_db(resume_id, "Summarize this resume skills", top_k=3)
         flat_chunks = [c for sublist in relevant_chunks for c in (sublist if isinstance(sublist, list) else [sublist])]
         context = "\n\n".join(flat_chunks)
-        summary = chain.invoke({"text": context})
+        summary = await asyncio.to_thread(chain.invoke, {"text": context})
         result = await mongo_collection_meta.update_one(
             {"id": resume_id},
-            {"$set": {"summary": str(summary["text"]), "status": "complete"}}
+            {"$set": {"summary": summary, "status": "complete"}}
         )
         return {
             "status": status.HTTP_200_OK,
             "data": {
                 "resume_id": resume_id,
-                "summary": str(summary["text"])
+                "summary": summary
             }
         }
     except Exception as ex:
