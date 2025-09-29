@@ -7,7 +7,8 @@ from starlette.datastructures import UploadFile
 from fastapi import status
 from concurrent.futures import ProcessPoolExecutor
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
+# from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 # from langchain_community.llms import HuggingFacePipeline
 from langchain_huggingface import HuggingFacePipeline
 from langchain.prompts import PromptTemplate
